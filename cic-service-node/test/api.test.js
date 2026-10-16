@@ -86,11 +86,13 @@ describe('GET /api/v1/diem-tin-dung/{soCccd}', () => {
       'coCauTinDung', 'duNoHienTai', 'lichSuTraNo',
       'thoiGianQuanHe', 'tinDungMoi', 'tongDiem',
     ])
-    // 10 trường thô mà cic_client.py đọc
+    // 14 trường thô theo contract Java hiện tại (10 trường cũ + trạng thái phục hồi nợ xấu)
     assert.deepEqual(Object.keys(than.hoSo).sort(), [
-      'duNoTheTinDung', 'hanMucThe', 'nhomNoCaoNhat', 'soHopDongDangCo',
+      'duNoTheTinDung', 'hanMucThe', 'ngayKhacPhucNoXau', 'nhomNoCaoNhat',
+      'nhomNoHienTai', 'soHopDongDangCo',
       'soLanTraCuu6Thang', 'soLanTreHan24Thang', 'soNgayTreDaiNhat',
-      'soThangQuanHe', 'soThangTuLanTreGanNhat', 'tongDuNo',
+      'soThangQuanHe', 'soThangTuLanTreGanNhat', 'tamKhoaVayDen',
+      'thamDinhThuCongDen', 'tongDuNo',
     ])
     assert.equal(than.hoSo.soThangQuanHe, 144)
   })
@@ -183,9 +185,9 @@ describe('GET /api/v1/ho-so', () => {
 })
 
 describe('GET /api/v1/ho-so/{soCccd}', () => {
-  test('trả 20 trường của hồ sơ thô', async () => {
+  test('trả 24 trường của hồ sơ thô', async () => {
     const { than } = await GET('/api/v1/ho-so/079081000001')
-    assert.equal(Object.keys(than).length, 20)
+    assert.equal(Object.keys(than).length, 24)
     assert.equal(than.soCccd, '079081000001')
   })
 

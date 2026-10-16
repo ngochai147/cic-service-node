@@ -34,8 +34,32 @@ const TEP_GHI = process.env.CIC_TEP_DU_LIEU
 
 const TEN_BLOB = process.env.CIC_TEN_BLOB ?? 'cic/du-lieu.json'
 
-/** Hình dạng rỗng — cũng là tài liệu về hai bảng của hệ thống. */
-const RONG = { hoSoTinDung: [], nhatKyTraCuu: [] }
+/** Hình dạng rỗng — cũng là tài liệu về các bảng logic của hệ thống. */
+const RONG = {
+  hoSoTinDung: [],
+  nhatKyTraCuu: [],
+  lienKetNguoiVay: [],
+  suKienDaXuLy: [],
+  suKienQuaHanChoXuLy: [],
+}
+
+/**
+ * Nâng tài liệu V2 cũ lên hình dạng hiện tại ngay khi đọc. Không ghi lại chỉ vì đọc,
+ * nhưng lần cập nhật kế tiếp sẽ lưu tài liệu đã chuẩn hoá.
+ */
+function chuanHoaDuLieu(duLieu) {
+  const d = duLieu && typeof duLieu === 'object' ? duLieu : {}
+  for (const [ten, macDinh] of Object.entries(RONG)) {
+    if (!Array.isArray(d[ten])) d[ten] = structuredClone(macDinh)
+  }
+  for (const h of d.hoSoTinDung) {
+    if (!Object.hasOwn(h, 'nhomNoHienTai')) h.nhomNoHienTai = h.nhomNoCaoNhat ?? null
+    if (!Object.hasOwn(h, 'ngayKhacPhucNoXau')) h.ngayKhacPhucNoXau = null
+    if (!Object.hasOwn(h, 'tamKhoaVayDen')) h.tamKhoaVayDen = null
+    if (!Object.hasOwn(h, 'thamDinhThuCongDen')) h.thamDinhThuCongDen = null
+  }
+  return d
+}
 
 function chonDriver() {
   const chon = process.env.CIC_KHO
@@ -128,7 +152,7 @@ export const kho = {
 
   /** Toàn bộ dữ liệu. Chỉ đọc — muốn sửa thì đi qua `capNhat`. */
   async layDuLieu() {
-    boNho ??= await driver.doc()
+    boNho ??= chuanHoaDuLieu(await driver.doc())
     return boNho
   },
 

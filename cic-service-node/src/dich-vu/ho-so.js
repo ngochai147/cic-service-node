@@ -17,7 +17,7 @@ export const KICH_BAN_HO_SO_MOI = 'Hồ sơ tín dụng mới'
 /** Trần kích thước trang, chặn một request kéo cả bảng về. */
 export const KICH_THUOC_TRANG_TOI_DA = 200
 
-/** 20 trường nghiệp vụ của một hồ sơ, đúng thứ tự của `HoSoResponse` bản Java. */
+/** Các trường nghiệp vụ của một hồ sơ, đúng contract `HoSoResponse` bản Java. */
 function raHoSo(h) {
   return {
     soCccd: h.soCccd,
@@ -27,6 +27,10 @@ function raHoSo(h) {
     tenKichBan: h.tenKichBan,
     ghiChu: h.ghiChu,
     nhomNoCaoNhat: h.nhomNoCaoNhat,
+    nhomNoHienTai: h.nhomNoHienTai,
+    ngayKhacPhucNoXau: h.ngayKhacPhucNoXau,
+    tamKhoaVayDen: h.tamKhoaVayDen,
+    thamDinhThuCongDen: h.thamDinhThuCongDen,
     soLanTreHan12Thang: h.soLanTreHan12Thang,
     soLanTreHan24Thang: h.soLanTreHan24Thang,
     soNgayTreDaiNhat: h.soNgayTreDaiNhat,
@@ -52,6 +56,7 @@ function raTomTat(h, diemCic) {
     hieuLucTu: h.hieuLucTu,
     tenKichBan: h.tenKichBan,
     nhomNoCaoNhat: h.nhomNoCaoNhat,
+    nhomNoHienTai: h.nhomNoHienTai,
     tongDuNo: h.tongDuNo,
     tongHanMuc: h.tongHanMuc,
     soLanTreHan12Thang: h.soLanTreHan12Thang,
@@ -78,6 +83,10 @@ export function dungHoSoMoi(soCccd) {
     tenKichBan: KICH_BAN_HO_SO_MOI,
     ghiChu: 'Tự dựng khi tra cứu lần đầu, CCCD chưa có trong dữ liệu',
     nhomNoCaoNhat: null,
+    nhomNoHienTai: null,
+    ngayKhacPhucNoXau: null,
+    tamKhoaVayDen: null,
+    thamDinhThuCongDen: null,
     soLanTreHan12Thang: 0,
     soLanTreHan24Thang: 0,
     soNgayTreDaiNhat: 0,
@@ -165,6 +174,10 @@ export async function taoPhienBanMoi(yeuCau) {
     tenKichBan: yeuCau.tenKichBan ?? null,
     ghiChu: yeuCau.ghiChu ?? null,
     nhomNoCaoNhat: yeuCau.nhomNoCaoNhat ?? null,
+    nhomNoHienTai: yeuCau.nhomNoCaoNhat ?? null,
+    ngayKhacPhucNoXau: null,
+    tamKhoaVayDen: null,
+    thamDinhThuCongDen: null,
     soLanTreHan12Thang: yeuCau.soLanTreHan12Thang,
     soLanTreHan24Thang: yeuCau.soLanTreHan24Thang,
     soNgayTreDaiNhat: yeuCau.soNgayTreDaiNhat,
