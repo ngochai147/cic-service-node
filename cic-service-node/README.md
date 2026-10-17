@@ -13,7 +13,7 @@ và `cic-web` trỏ sang bản này không phải sửa một dòng nào.
 ```bash
 npm install
 npm start           # http://localhost:9000
-npm test            # 177 test (1 test đang đỏ chờ Hải sửa dữ liệu thử — xem B66 ở mục Tích hợp FINORA)
+npm test            # 180 test (1 test đang đỏ chờ Hải sửa dữ liệu thử — xem B66 ở mục Tích hợp FINORA)
 ```
 
 Không cần cài PostgreSQL, không cần Docker, không cần biến môi trường nào.
@@ -195,7 +195,7 @@ src/
     ngay.js  loi.js  kiem-tra-cccd.js
 api/index.js               điểm vào Vercel serverless (không bao giờ nạp Kafka)
 dulieu/du-lieu.json        1000 hồ sơ seed
-test/                      177 test, gồm mốc đối chiếu với bản Java
+test/                      180 test, gồm mốc đối chiếu với bản Java
 tools/chuyen-seed.mjs      sinh lại du-lieu.json từ file SQL gốc
 ```
 

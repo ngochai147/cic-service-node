@@ -35,3 +35,5 @@ Task 2: complete (tests: `node --test "test/**/*.test.js"` -> 110 passed, 1 fail
 Task 3: complete (tests: `node --test "test/**/*.test.js"` -> 145 passed, 1 failed — B66; score fixture 1,000/1,000 unchanged).
 
 Task 4: complete (tests: `node --test "test/**/*.test.js"` -> 176 passed, 1 failed — B66; score fixture 1,000/1,000 unchanged; smoke Kafka thật trên topic `cic-smoke.*` của broker `finora-kafka` xanh, topic và group smoke đã xoá). Hải review trước merge.
+
+Review: hậu kiểm diff cuối — (1) `kho.layDuLieu` để các lượt nạp đồng thời tự gán đè bộ nhớ đệm, có thể mất một lượt ghi; sửa bằng một lượt nạp dùng chung (thuộc B67); (2) borrowerId và finora-trace-id do bên ngoài gửi được log dạng JSON để không giả được dòng log (tests: `node --test "test/**/*.test.js"` -> 179 passed, 1 failed — B66; score fixture 1,000/1,000 unchanged). Hải review trước merge.
