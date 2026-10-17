@@ -7,3 +7,5 @@
 import { taoApp } from '../src/app.js'
 
 export default taoApp()
+
+
