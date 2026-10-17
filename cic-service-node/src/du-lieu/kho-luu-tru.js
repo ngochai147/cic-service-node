@@ -150,6 +150,12 @@ const driver = chonDriver() === 'blob' ? driverBlob : driverTep
 
 /** Bộ nhớ đệm trong tiến trình: tránh đọc lại nguồn ở mỗi request. */
 let boNho = null
+/**
+ * Lượt nạp đang chạy. Mọi lời gọi đồng thời dùng chung một lượt: nếu mỗi lời gọi tự nạp
+ * rồi tự gán `boNho`, lượt nạp về sau có thể đè lên bản mà một lượt ghi vừa sửa và ghi
+ * xuống — lượt ghi kế tiếp sẽ ghi lại bản cũ, làm mất dữ liệu.
+ */
+let dangNap = null
 /** Hàng đợi ghi, giữ cho các thao tác đọc-sửa-ghi không chen nhau. */
 let hangDoi = Promise.resolve()
 
@@ -161,8 +167,16 @@ export const kho = {
 
   /** Toàn bộ dữ liệu. Chỉ đọc — muốn sửa thì đi qua `capNhat`. */
   async layDuLieu() {
-    boNho ??= chuanHoaDuLieu(await driver.doc())
-    return boNho
+    if (boNho) return boNho
+    dangNap ??= driver.doc()
+      .then((duLieu) => {
+        boNho = chuanHoaDuLieu(duLieu)
+        return boNho
+      })
+      .finally(() => {
+        dangNap = null
+      })
+    return dangNap
   },
 
   /**

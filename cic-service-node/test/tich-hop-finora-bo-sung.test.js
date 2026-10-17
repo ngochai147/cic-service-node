@@ -326,6 +326,24 @@ describe('Đệm kho khi ghi xuống nguồn thất bại', { concurrency: false
     const lanThuLai = await xuLyLoanDelinquencyChanged(id, '2026-10-03T03:00:00Z', suKien({ borrowerId }))
     assert.equal(lanThuLai.trangThai, 'DA_CAP_NHAT', 'thử lại phải được áp, không bị coi là trùng')
   })
+
+  test('nạp lại đồng thời sau khi bỏ đệm dùng chung MỘT bản, không ghi đè lẫn nhau', async () => {
+    kho.xoaDem()
+    const [a, b, c] = await Promise.all([kho.layDuLieu(), kho.layDuLieu(), kho.layDuLieu()])
+    assert.equal(a, b)
+    assert.equal(b, c)
+
+    // Một lượt ghi chen giữa các lượt nạp lại vẫn phải còn nguyên sau đó.
+    kho.xoaDem()
+    const id = uuid()
+    const [, ketQua] = await Promise.all([
+      kho.layDuLieu(),
+      xuLyLoanDelinquencyChanged(id, '2026-10-03T03:00:00Z', suKien({ borrowerId: 'nap-dong-thoi' })),
+      kho.layDuLieu(),
+    ])
+    assert.equal(ketQua.trangThai, 'CHO_MAPPING')
+    assert.ok((await kho.layDuLieu()).suKienQuaHanChoXuLy.some((e) => e.eventId === id))
+  })
 })
 
 describe('Chốt kho công khai', () => {
