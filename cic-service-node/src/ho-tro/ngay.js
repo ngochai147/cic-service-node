@@ -77,3 +77,85 @@ export function bayGio(luc = new Date()) {
 export function mocThoiGian(chuoi) {
   return new Date(chuoi).getTime()
 }
+
+// ── Ngày và thời điểm của sự kiện tích hợp FINORA ────────────────────────────
+// Dữ liệu từ ngoài vào nên kiểm chặt bằng tay, không giao cho `Date.parse` (V8 nhận cả
+// những chuỗi mà `Instant.parse`/`LocalDate.parse` của Java từ chối).
+
+const NGAY_ISO = /^(\d{4})-(\d{2})-(\d{2})$/
+const THOI_DIEM_ISO =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/
+const NANO_MOI_MS = 1_000_000n
+
+/** Năm nhuận theo lịch Gregory, giống `java.time`. */
+function laNamNhuan(nam) {
+  return (nam % 4 === 0 && nam % 100 !== 0) || nam % 400 === 0
+}
+
+function soNgayTrongThang(nam, thang) {
+  return [31, laNamNhuan(nam) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][thang - 1]
+}
+
+const hai = (n) => String(n).padStart(2, '0')
+
+/** `true` nếu là ngày 'yyyy-MM-dd' có thật trên lịch — tương đương `LocalDate.parse` thành công. */
+export function laNgayIsoHopLe(chuoi) {
+  if (typeof chuoi !== 'string') return false
+  const m = NGAY_ISO.exec(chuoi)
+  if (!m) return false
+  const [nam, thang, ngay] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  return thang >= 1 && thang <= 12 && ngay >= 1 && ngay <= soNgayTrongThang(nam, thang)
+}
+
+/**
+ * Cộng tháng vào một ngày 'yyyy-MM-dd', tương đương `LocalDate.plusMonths`: ngày vượt
+ * cuối tháng đích thì lùi về ngày cuối tháng (31/01 + 1 tháng = 28/02 hoặc 29/02).
+ */
+export function congThang(ngayIso, soThang) {
+  const [nam, thang, ngay] = ngayIso.split('-').map(Number)
+  const tong = nam * 12 + (thang - 1) + soThang
+  const namMoi = Math.floor(tong / 12)
+  const thangMoi = tong - namMoi * 12 + 1
+  const ngayMoi = Math.min(ngay, soNgayTrongThang(namMoi, thangMoi))
+  return `${String(namMoi).padStart(4, '0')}-${hai(thangMoi)}-${hai(ngayMoi)}`
+}
+
+/**
+ * Đọc thời điểm ISO-8601 có múi giờ (`Z` hoặc `±HH:mm`), phần lẻ giây tối đa 9 chữ số —
+ * cùng tập chuỗi mà `Instant.parse` của Java 21 nhận với dữ liệu FINORA gửi.
+ *
+ * @returns số nano-giây kể từ epoch (BigInt) để so thứ tự không mất phần micro/nano giây,
+ *          hoặc `null` nếu sai dạng hay ngày giờ không có thật
+ */
+export function docThoiDiemIso(chuoi) {
+  if (typeof chuoi !== 'string') return null
+  const m = THOI_DIEM_ISO.exec(chuoi)
+  if (!m) return null
+  const [nam, thang, ngay, gio, phut, giay] = m.slice(1, 7).map(Number)
+  if (thang < 1 || thang > 12 || ngay < 1 || ngay > soNgayTrongThang(nam, thang)
+      || gio > 23 || phut > 59 || giay > 59) {
+    return null
+  }
+  let lechPhut = 0
+  if (m[8] !== 'Z') {
+    const [lechGio, lechPhutLe] = m[8].slice(1).split(':').map(Number)
+    if (lechPhutLe > 59 || lechGio * 60 + lechPhutLe > 18 * 60) return null
+    lechPhut = (m[8][0] === '-' ? -1 : 1) * (lechGio * 60 + lechPhutLe)
+  }
+  // setUTCFullYear thay cho Date.UTC: Date.UTC hiểu năm 0..99 thành 1900..1999.
+  const moc = new Date(0)
+  moc.setUTCFullYear(nam, thang - 1, ngay)
+  moc.setUTCHours(gio, phut, giay, 0)
+  const msNguyenGiay = moc.getTime() - lechPhut * 60_000
+  return BigInt(msNguyenGiay) * NANO_MOI_MS + BigInt((m[7] ?? '').padEnd(9, '0'))
+}
+
+/**
+ * Ngày lịch theo múi giờ hệ thống của một mốc nano-giây — tương đương
+ * `instant.atZone(MUI_GIO).toLocalDate()`.
+ */
+export function ngayTheoMuiGio(nanoGiay) {
+  let ms = nanoGiay / NANO_MOI_MS
+  if (nanoGiay < 0n && nanoGiay % NANO_MOI_MS !== 0n) ms -= 1n
+  return homNay(new Date(Number(ms)))
+}

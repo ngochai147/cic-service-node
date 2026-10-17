@@ -77,6 +77,7 @@ async function docSeed() {
 const driverTep = {
   ten: 'tep',
   nguon: TEP_GHI,
+  congKhai: false,
 
   async doc() {
     if (!existsSync(TEP_GHI)) {
@@ -102,6 +103,12 @@ const driverTep = {
 const driverBlob = {
   ten: 'blob',
   nguon: TEN_BLOB,
+  /**
+   * `ghi()` dùng `access: 'public'` với đường dẫn cố định: ai có URL là đọc được toàn bộ
+   * tài liệu. @vercel/blob 0.27 chỉ hỗ trợ public; Blob riêng tư cần store tạo ở chế độ
+   * private và SDK >= 2.3. Endpoint liên kết CCCD dựa vào cờ này để từ chối lưu PII.
+   */
+  congKhai: true,
   _mo: null,
 
   async _thuVien() {
@@ -149,6 +156,8 @@ let hangDoi = Promise.resolve()
 export const kho = {
   tenDriver: driver.ten,
   nguon: driver.nguon,
+  /** `true` khi nơi lưu đọc được công khai bằng URL (Vercel Blob `access: 'public'`). */
+  congKhai: driver.congKhai,
 
   /** Toàn bộ dữ liệu. Chỉ đọc — muốn sửa thì đi qua `capNhat`. */
   async layDuLieu() {
@@ -161,13 +170,23 @@ export const kho = {
    *
    * @param {(duLieu: object) => any} bienDoi nhận dữ liệu hiện tại, sửa tại chỗ,
    *        trả về giá trị mà bên gọi cần. Ghi xuống nguồn sau khi hàm này chạy xong.
+   *
+   * Lượt nào hỏng (bienDoi ném lỗi, hoặc ghi xuống nguồn thất bại) thì bỏ bộ nhớ đệm:
+   * bienDoi có thể đã sửa dở bản trong RAM, hoặc RAM đã đi trước nguồn. Lượt sau đọc lại
+   * đúng trạng thái đã bền vững — không để một sự kiện "đã xử lý" chỉ tồn tại trong RAM
+   * rồi bị consumer coi là trùng và commit offset.
    */
   async capNhat(bienDoi) {
     const luot = hangDoi.then(async () => {
       const duLieu = await this.layDuLieu()
-      const ketQua = await bienDoi(duLieu)
-      await driver.ghi(duLieu)
-      return ketQua
+      try {
+        const ketQua = await bienDoi(duLieu)
+        await driver.ghi(duLieu)
+        return ketQua
+      } catch (loi) {
+        if (boNho === duLieu) boNho = null
+        throw loi
+      }
     })
     // Nuốt lỗi ở nhánh hàng đợi để một lượt ghi hỏng không chặn mọi lượt sau.
     hangDoi = luot.catch(() => {})

@@ -8,6 +8,9 @@
  *
  * Cấu hình sai thì tiến trình phải chết ngay lúc khởi động, chứ không trả điểm sai
  * suốt vòng đời.
+ *
+ * Cuối tệp là cấu hình tích hợp FINORA (chính sách nợ xấu, endpoint nội bộ, Kafka) —
+ * không có giá trị nào trong đó ảnh hưởng tới công thức chấm điểm.
  */
 
 /** Múi giờ duy nhất của hệ thống, khớp `CauHinhChung.MUI_GIO` bản Java. */
@@ -137,3 +140,73 @@ export function kiemTraCauHinh(ts = thamSoChamDiem) {
 }
 
 kiemTraCauHinh()
+
+// ── Tích hợp FINORA ──────────────────────────────────────────────────────────
+
+/** Trần an toàn cho số tháng: 100 năm, đủ xa mà ngày kết quả vẫn giữ dạng 'yyyy-MM-dd'. */
+const SO_THANG_TOI_DA = 1200
+
+function docSoThang(env, ten, macDinh) {
+  const tho = env[ten]
+  if (tho == null || String(tho).trim() === '') return macDinh
+  const chuoi = String(tho).trim()
+  if (!/^\d+$/.test(chuoi) || Number(chuoi) > SO_THANG_TOI_DA) {
+    throw new Error(`${ten} phải là số nguyên trong [0, ${SO_THANG_TOI_DA}], nhận được: ${tho}`)
+  }
+  return Number(chuoi)
+}
+
+/**
+ * Chính sách sau khi khắc phục nợ xấu — tương đương `ChinhSachNoXau.java` (`@Min(0)`).
+ *
+ * Thêm đúng một ràng buộc mà bản Java giao cho CHECK `ck_ho_so_cua_so_phuc_hoi` của
+ * PostgreSQL: mốc thẩm định thủ công không được sớm hơn mốc tạm khoá. Ở đây không có DB
+ * nào chặn hộ, nên cấu hình sai phải làm tiến trình chết ngay lúc khởi động.
+ *
+ * Đây là chính sách rủi ro NỘI BỘ của FINORA, KHÔNG phải thời hạn cấm vay do pháp luật ấn định.
+ */
+export function docChinhSachNoXau(env = process.env) {
+  const soThangTamKhoa = docSoThang(env, 'CIC_BAD_DEBT_COOLDOWN_MONTHS', 12)
+  const soThangThamDinhThuCong = docSoThang(env, 'CIC_BAD_DEBT_MANUAL_REVIEW_MONTHS', 24)
+  if (soThangThamDinhThuCong < soThangTamKhoa) {
+    throw new Error('CIC_BAD_DEBT_MANUAL_REVIEW_MONTHS không được nhỏ hơn '
+      + `CIC_BAD_DEBT_COOLDOWN_MONTHS (${soThangThamDinhThuCong} < ${soThangTamKhoa})`)
+  }
+  return Object.freeze({ soThangTamKhoa, soThangThamDinhThuCong })
+}
+
+export const chinhSachNoXau = docChinhSachNoXau()
+
+const laTrue = (giaTri) => String(giaTri ?? '').trim().toLowerCase() === 'true'
+
+/**
+ * Cấu hình endpoint nội bộ `POST /api/v1/internal/borrower-mappings`.
+ *
+ * Đọc lại mỗi lần gọi (rẻ) để test và tiến trình dài hạn thấy đúng giá trị môi trường.
+ *   - `CIC_INTERNAL_API_KEY` rỗng/chỉ có khoảng trắng → endpoint ĐÓNG (403), như bản Java.
+ *   - `CIC_CHO_PHEP_PII_TREN_BLOB_CONG_KHAI=true` → chấp nhận lưu liên kết CCCD dù kho là
+ *     Vercel Blob công khai. Chỉ dùng khi chắc chắn mọi CCCD gửi tới đều là dữ liệu giả lập.
+ */
+export function docCauHinhTichHop(env = process.env) {
+  return {
+    khoaApiNoiBo: env.CIC_INTERNAL_API_KEY ?? '',
+    choPhepPiiTrenBlobCongKhai: laTrue(env.CIC_CHO_PHEP_PII_TREN_BLOB_CONG_KHAI),
+  }
+}
+
+/**
+ * Consumer Kafka cho `LoanDelinquencyChanged.v1`. Bản Java mặc định bật; bản Node mặc
+ * định TẮT vì function Vercel không giữ được kết nối Kafka lâu dài — chỉ `src/server.js`
+ * khởi động consumer, và chỉ khi `CIC_KAFKA_CONSUMER_ENABLED=true`.
+ */
+export function docCauHinhKafka(env = process.env) {
+  return Object.freeze({
+    batConsumer: laTrue(env.CIC_KAFKA_CONSUMER_ENABLED),
+    brokers: Object.freeze(String(env.KAFKA_BOOTSTRAP_SERVERS || 'localhost:9092')
+      .split(',').map((b) => b.trim()).filter(Boolean)),
+    groupId: env.CIC_LOAN_DELINQUENCY_GROUP || 'cic-loan-delinquency',
+    topic: env.LOAN_DELINQUENCY_CHANGED_TOPIC || 'finora.loan.delinquency-changed',
+  })
+}
+
+export const cauHinhKafka = docCauHinhKafka()
