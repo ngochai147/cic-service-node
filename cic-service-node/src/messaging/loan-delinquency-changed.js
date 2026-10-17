@@ -146,8 +146,9 @@ export function taoBoXuLyTinNhan({
     for (let lan = 0; ; lan += 1) {
       try {
         const kq = await xuLy(suKien.eventId, suKien.occurredAt, suKien.data)
-        nhatKy.info('Đã xử lý LoanDelinquencyChanged: eventId=%s, traceId=%s, trangThai=%s, '
-          + 'phienBan=%s, offset=%s', suKien.eventId, suKien.traceId ?? '-', kq?.trangThai,
+        // traceId lấy từ header, không được kiểm dạng: log dạng JSON (`%j`) để không giả được dòng log.
+        nhatKy.info('Đã xử lý LoanDelinquencyChanged: eventId=%s, traceId=%j, trangThai=%s, '
+          + 'phienBan=%s, offset=%s', suKien.eventId, suKien.traceId, kq?.trangThai,
         kq?.phienBan ?? '-', message.offset)
         return { ketQua: 'XONG', trangThai: kq?.trangThai }
       } catch (loi) {

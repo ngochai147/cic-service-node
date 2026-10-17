@@ -149,10 +149,11 @@ export function taoApp() {
   // ── Nội bộ: liên kết borrowerId ↔ CCCD cho FINORA ────────────────────────
   // Luôn 201 khi thành công, kể cả gửi lại đúng cặp (idempotent) — như bản Java.
   // Thân phản hồi chỉ có CCCD đã che; log chỉ có borrowerId, không có CCCD hay khoá.
+  // borrowerId do bên gọi gửi nên được log dạng JSON (`%j`): xuống dòng không giả được log.
 
   app.post(`${DUONG_DAN_NOI_BO}/borrower-mappings`, async_(async (req, res) => {
     const ketQua = await dvTichHop.taoLienKetNguoiVay(req.body)
-    console.info('Đã ghi liên kết CIC: borrowerId=%s, soSuKienDaPhatLai=%d',
+    console.info('Đã ghi liên kết CIC: borrowerId=%j, soSuKienDaPhatLai=%d',
       ketQua.borrowerId, ketQua.soSuKienDaPhatLai)
     res.status(201).json(ketQua)
   }))

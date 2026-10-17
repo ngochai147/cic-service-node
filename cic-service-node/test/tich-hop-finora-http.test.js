@@ -289,8 +289,17 @@ describe('Endpoint công khai không đổi', () => {
 })
 
 describe('Log không chứa CCCD thô hay khoá', () => {
+  test('borrowerId có ký tự xuống dòng không giả được dòng log', async () => {
+    const r = await goi('mo', { than: { borrowerId: '7301\nGIA MAO: da xoa CIC', soCccd: '079298000041' }, khoa: KHOA })
+    assert.equal(r.status, 201)
+    const dong = nhatKy.find((d) => d.includes('7301'))
+    assert.ok(dong)
+    assert.equal(dong.includes('\n'), false)
+    assert.ok(dong.includes('borrowerId="7301\\nGIA MAO: da xoa CIC"'))
+  })
+
   test('mọi dòng log của file test này', () => {
-    assert.ok(nhatKy.some((d) => d.includes('borrowerId=7001')), 'phải có log khi liên kết thành công')
+    assert.ok(nhatKy.some((d) => d.includes('borrowerId="7001"')), 'phải có log khi liên kết thành công')
     for (const dong of nhatKy) {
       assert.equal(/079298\d{6}/.test(dong), false, `lộ CCCD: ${dong.slice(0, 120)}`)
       assert.equal(dong.includes(KHOA), false, 'lộ khoá nội bộ')

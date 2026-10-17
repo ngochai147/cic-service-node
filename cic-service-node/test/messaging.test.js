@@ -9,6 +9,7 @@ import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync 
 import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { format } from 'node:util'
 
 const GOC = join(dirname(fileURLToPath(import.meta.url)), '..')
 const THU_MUC = mkdtempSync(join(tmpdir(), 'cic-messaging-'))
@@ -263,6 +264,25 @@ describe('Bộ xử lý tin nhắn', () => {
     await b.goi(giaTri(envelope()))
     assert.equal(soLanGoi, 3)
     assert.equal(b.dlt[0].phanLoai, 'HET_LUOT_THU_LAI')
+  })
+
+  test('traceId từ header có ký tự xuống dòng không giả được dòng log', async () => {
+    const dong = []
+    const xuLyTinNhan = taoBoXuLyTinNhan({
+      xuLy: async () => ({ trangThai: 'CHO_MAPPING' }),
+      guiDlt: async () => {},
+      nhatKy: { info: (...x) => dong.push(format(...x)), warn() {}, error() {} },
+    })
+    await xuLyTinNhan({
+      topic: 't', partition: 0,
+      message: {
+        value: giaTri(envelope()), offset: '3',
+        headers: headersFinora({ 'finora-trace-id': Buffer.from('abc\n[GIA MAO] da xoa') }),
+      },
+    })
+    assert.equal(dong.length, 1)
+    assert.equal(dong[0].includes('\n'), false)
+    assert.ok(dong[0].includes('traceId="abc\\n[GIA MAO] da xoa"'))
   })
 
   test('DLT gửi lỗi thì bộ xử lý ném lỗi (để offset không được commit)', async () => {
