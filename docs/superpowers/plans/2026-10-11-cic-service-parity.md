@@ -55,10 +55,10 @@
 - Consumes: `kho.capNhat`, `dungHoSoMoi(soCccd)`, ISO date helpers.
 - Produces: `taoLienKetNguoiVay(request)`, `xuLyLoanDelinquencyChanged(eventId, occurredAt, data)`, and strict validation helpers.
 
-- [ ] Add failing tests for pending events, replay order, duplicate suppression, new late occurrence, recovery windows, preserved aggregates, and invalid data.
-- [ ] Verify failures are caused by absent service behavior.
-- [ ] Implement all mapping/event operations within one serialized storage mutation per operation.
-- [ ] Run focused and full suites.
+- [x] Add failing tests for pending events, replay order, duplicate suppression, new late occurrence, recovery windows, preserved aggregates, and invalid data.
+- [x] Verify failures are caused by absent service behavior.
+- [x] Implement all mapping/event operations within one serialized storage mutation per operation.
+- [x] Run focused and full suites.
 
 ### Task 3: Protected internal HTTP endpoint
 
@@ -71,10 +71,10 @@
 - Consumes: `taoLienKetNguoiVay(request)` and `CIC_INTERNAL_API_KEY`.
 - Produces: `POST /api/v1/internal/borrower-mappings` returning HTTP 201 or Java-compatible HTTP 400/403 errors.
 
-- [ ] Add failing HTTP tests for closed, wrong-key, valid, idempotent, and conflicting requests.
-- [ ] Verify expected 404/authorization failures.
-- [ ] Implement constant-time key validation, CORS header allowance, route, and error mapping.
-- [ ] Run focused and full suites.
+- [x] Add failing HTTP tests for closed, wrong-key, valid, idempotent, and conflicting requests.
+- [x] Verify expected 404/authorization failures.
+- [x] Implement constant-time key validation, CORS header allowance, route, and error mapping.
+- [x] Run focused and full suites.
 
 ### Task 4: Kafka consumer adapter and documentation
 
@@ -90,8 +90,8 @@
 - Consumes: `xuLyLoanDelinquencyChanged(eventId, occurredAt, data)`.
 - Produces: `docLoanDelinquencyChanged(payload, headers)`, `khoiDongKafkaConsumer()`, and `dongKafkaConsumer()`.
 
-- [ ] Add failing parser tests for valid V1, header mismatch, malformed JSON, unsupported versions, and invalid UUID/timestamps.
-- [ ] Verify failures are due to the missing module.
-- [ ] Implement the pure parser and KafkaJS adapter with retry/DLT behavior.
-- [ ] Start/stop the adapter from the local server only when enabled and document configuration/storage changes.
-- [ ] Run focused and full suites, then inspect the final diff.
+- [x] Add failing parser tests for valid V1, header mismatch, malformed JSON, unsupported versions, and invalid UUID/timestamps.
+- [x] Verify failures are due to the missing module.
+- [x] Implement the pure parser and KafkaJS adapter with retry/DLT behavior.
+- [x] Start/stop the adapter from the local server only when enabled and document configuration/storage changes.
+- [x] Run focused and full suites, then inspect the final diff.
