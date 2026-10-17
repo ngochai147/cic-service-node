@@ -1,22 +1,54 @@
 /**
- * Tầng HTTP: 8 endpoint, giữ nguyên 100% contract của bản Java.
+ * Tầng HTTP: 8 endpoint công khai giữ nguyên 100% contract của bản Java, cộng endpoint
+ * nội bộ `POST /api/v1/internal/borrower-mappings` cho `CicMappingWorker` của FINORA.
  *
  * Mọi lỗi ra khỏi service đều mang đúng một hình dạng: `{maLoi, thongDiep}`.
  * Cố ý KHÔNG có nhánh nào trả 404 cho CCCD chưa tồn tại — hệ thống dựng hồ sơ tín
  * dụng mới và trả 200.
  */
+import { createHash, timingSafeEqual } from 'node:crypto'
 import express from 'express'
 
-import { thamSoMoPhong } from './cau-hinh.js'
+import { docCauHinhTichHop, thamSoMoPhong } from './cau-hinh.js'
 import { kho } from './du-lieu/kho-luu-tru.js'
-import { CicKhongKhaDung, LoiCoMa, MaLoi } from './ho-tro/loi.js'
+import { CicKhongKhaDung, LoiCoMa, MaLoi, TruyCapNoiBoBiTuChoi } from './ho-tro/loi.js'
 import * as dvHoSo from './dich-vu/ho-so.js'
 import * as dvTraCuu from './dich-vu/tra-cuu.js'
 import * as dvNhatKy from './dich-vu/nhat-ky.js'
 import * as dvThongKe from './dich-vu/thong-ke.js'
+import * as dvTichHop from './dich-vu/tich-hop-finora.js'
 
 /** Bọc handler async để lỗi rơi đúng vào middleware xử lý lỗi của Express 4. */
 const async_ = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
+
+const DUONG_DAN_NOI_BO = '/api/v1/internal'
+const HEADER_KHOA_NOI_BO = 'X-Finora-Internal-Key'
+
+const bamSha256 = (chuoi) => createHash('sha256').update(chuoi, 'utf8').digest()
+
+/**
+ * Chốt khoá cho mọi đường dẫn `/api/v1/internal/*` — `KiemTraApiNoiBo.java`.
+ *
+ *   - Khoá cấu hình rỗng → đóng hẳn: mọi request 403, như bản Java.
+ *   - So khoá bằng `timingSafeEqual` trên SHA-256 của hai phía: hai digest luôn dài 32
+ *     byte nên không ném lỗi khi độ dài khác nhau và không lộ độ dài khoá qua thời gian
+ *     phản hồi (bản Java `MessageDigest.isEqual` vẫn trả sớm khi lệch độ dài).
+ *   - Chạy TRƯỚC `express.json`: request chưa xác thực không được đọc thân. (Bản Java
+ *     kiểm `@Valid` trước nên thân sai + khoá sai ra 400; ở đây ra 403.)
+ *   - Không bao giờ log khoá nhận được.
+ */
+function taoChotKhoaNoiBo(khoaCauHinh) {
+  const mong = typeof khoaCauHinh === 'string' && khoaCauHinh.trim() !== ''
+    ? bamSha256(khoaCauHinh)
+    : null
+  return (req, _res, next) => {
+    const nhan = req.get(HEADER_KHOA_NOI_BO)
+    if (mong == null || typeof nhan !== 'string' || !timingSafeEqual(mong, bamSha256(nhan))) {
+      return next(new TruyCapNoiBoBiTuChoi())
+    }
+    return next()
+  }
+}
 
 /** Đọc tham số số nguyên từ query, rơi về mặc định khi thiếu hoặc không phải số. */
 function soNguyen(giaTri, macDinh) {
@@ -29,18 +61,24 @@ export function taoApp() {
   const app = express()
   app.disable('x-powered-by')
   app.set('json spaces', 0)
-  app.use(express.json({ limit: '1mb' }))
 
   // CORS: bản Java không mở CORS (cic-web đi qua proxy của Vite). Bản này chạy trên
   // Vercel nên giao diện có thể nằm khác origin — mở đọc cho mọi origin, không gửi
-  // cookie. Dữ liệu vốn là dữ liệu mô phỏng, không có PII thật.
+  // cookie. Dữ liệu vốn là dữ liệu mô phỏng, không có PII thật. Đặt TRƯỚC mọi bước khác
+  // để cả phản hồi lỗi (403, JSON hỏng) cũng mang header CORS. Cho phép header khoá nội
+  // bộ để màn quản trị demo gọi được endpoint liên kết; khoá vẫn là thứ bảo vệ duy nhất.
   app.use((req, res, next) => {
     res.set('Access-Control-Allow-Origin', '*')
     res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Accept')
+    res.set('Access-Control-Allow-Headers', `Content-Type, Accept, ${HEADER_KHOA_NOI_BO}`)
     if (req.method === 'OPTIONS') return res.sendStatus(204)
     return next()
   })
+
+  // Khoá đọc một lần lúc dựng app, như cấu hình Spring nạp lúc khởi động.
+  app.use(DUONG_DAN_NOI_BO, taoChotKhoaNoiBo(docCauHinhTichHop().khoaApiNoiBo))
+
+  app.use(express.json({ limit: '1mb' }))
 
   // ── Mô phỏng sự cố ───────────────────────────────────────────────────────
   // Đây là nơi DUY NHẤT trong toàn hệ thống có số ngẫu nhiên, và nó nằm ngoài bộ
@@ -107,6 +145,17 @@ export function taoApp() {
   app.get('/api/v1/cau-hinh', (_req, res) => {
     res.json(dvThongKe.cauHinh())
   })
+
+  // ── Nội bộ: liên kết borrowerId ↔ CCCD cho FINORA ────────────────────────
+  // Luôn 201 khi thành công, kể cả gửi lại đúng cặp (idempotent) — như bản Java.
+  // Thân phản hồi chỉ có CCCD đã che; log chỉ có borrowerId, không có CCCD hay khoá.
+
+  app.post(`${DUONG_DAN_NOI_BO}/borrower-mappings`, async_(async (req, res) => {
+    const ketQua = await dvTichHop.taoLienKetNguoiVay(req.body)
+    console.info('Đã ghi liên kết CIC: borrowerId=%s, soSuKienDaPhatLai=%d',
+      ketQua.borrowerId, ketQua.soSuKienDaPhatLai)
+    res.status(201).json(ketQua)
+  }))
 
   // ── Sức khoẻ ─────────────────────────────────────────────────────────────
   // Giữ nguyên đường dẫn `/actuator/health` của Spring Boot để cic-web và mọi
