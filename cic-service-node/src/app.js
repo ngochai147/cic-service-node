@@ -1,6 +1,6 @@
 /**
- * Tầng HTTP: 8 endpoint công khai giữ nguyên 100% contract của bản Java, cộng endpoint
- * nội bộ `POST /api/v1/internal/borrower-mappings` cho `CicMappingWorker` của FINORA.
+ * Tầng HTTP: 8 endpoint công khai giữ nguyên contract của bản Java, cộng hai endpoint
+ * nội bộ cho mapping borrower và tiếp nhận `LoanDelinquencyChanged.v1` từ FINORA.
  *
  * Mọi lỗi ra khỏi service đều mang đúng một hình dạng: `{maLoi, thongDiep}`.
  * Cố ý KHÔNG có nhánh nào trả 404 cho CCCD chưa tồn tại — hệ thống dựng hồ sơ tín
@@ -11,7 +11,9 @@ import express from 'express'
 
 import { docCauHinhTichHop, thamSoMoPhong } from './cau-hinh.js'
 import { kho } from './du-lieu/kho-luu-tru.js'
-import { CicKhongKhaDung, LoiCoMa, MaLoi, TruyCapNoiBoBiTuChoi } from './ho-tro/loi.js'
+import {
+  CicKhongKhaDung, LoiCoMa, MaLoi, SuKienKhongHopLe, TruyCapNoiBoBiTuChoi,
+} from './ho-tro/loi.js'
 import * as dvHoSo from './dich-vu/ho-so.js'
 import * as dvTraCuu from './dich-vu/tra-cuu.js'
 import * as dvNhatKy from './dich-vu/nhat-ky.js'
@@ -156,6 +158,29 @@ export function taoApp() {
     console.info('Đã ghi liên kết CIC: borrowerId=%j, soSuKienDaPhatLai=%d',
       ketQua.borrowerId, ketQua.soSuKienDaPhatLai)
     res.status(201).json(ketQua)
+  }))
+
+  // Vercel không duy trì consumer Kafka dài hạn. Loan relay event qua cổng HTTPS này;
+  // domain service bên dưới vẫn là nguồn duy nhất cho validation, idempotency và hàng chờ mapping.
+  app.post(`${DUONG_DAN_NOI_BO}/loan-delinquency-events`, async_(async (req, res) => {
+    const envelope = req.body
+    if (envelope == null || typeof envelope !== 'object' || Array.isArray(envelope)) {
+      throw new SuKienKhongHopLe('LoanDelinquencyChanged: envelope phải là JSON object')
+    }
+    if (envelope.version !== dvTichHop.PHIEN_BAN_SU_KIEN) {
+      throw new SuKienKhongHopLe(
+        `LoanDelinquencyChanged: envelope version phải là ${dvTichHop.PHIEN_BAN_SU_KIEN} (số nguyên JSON)`,
+      )
+    }
+
+    const ketQua = await dvTichHop.xuLyLoanDelinquencyChanged(
+      envelope.eventId, envelope.occurredAt, envelope.data,
+    )
+    const trangThaiHttp = ketQua.trangThai === dvTichHop.TrangThaiSuKien.CHO_MAPPING ? 202 : 200
+    res.status(trangThaiHttp).json({
+      eventId: String(envelope.eventId).toLowerCase(),
+      ...ketQua,
+    })
   }))
 
   // ── Sức khoẻ ─────────────────────────────────────────────────────────────

@@ -67,8 +67,10 @@ java -cp "out;$CP" DoiChieu dulieu/du-lieu.json > test/diem-java-goc.txt
 
 `/actuator/health` giữ nguyên đường dẫn của Spring Boot để `cic-web` không phải sửa gì.
 
-Ngoài 8 endpoint công khai còn một endpoint nội bộ có khoá cho FINORA,
-`POST /api/v1/internal/borrower-mappings` — xem mục [Tích hợp FINORA](#tích-hợp-finora--kênh-báo-cáo-quá-hạn-mô-phỏng).
+Ngoài 8 endpoint công khai còn hai endpoint nội bộ có khoá cho FINORA:
+`POST /api/v1/internal/borrower-mappings` và
+`POST /api/v1/internal/loan-delinquency-events` — xem mục
+[Tích hợp FINORA](#tích-hợp-finora--kênh-báo-cáo-quá-hạn-mô-phỏng).
 
 Bốn mã lỗi giữ nguyên: `CCCD_KHONG_HOP_LE`, `DU_LIEU_KHONG_HOP_LE`,
 `CIC_KHONG_KHA_DUNG`, `LOI_HE_THONG`. Mọi lỗi đều có hình dạng `{maLoi, thongDiep}`.
@@ -246,8 +248,9 @@ do pháp luật ấn định.
 
 ```
 finora-user (eKYC xong) ─ POST /api/v1/internal/borrower-mappings ─► lienKetNguoiVay
-finora-loan (DPD đổi)   ─ Kafka finora.loan.delinquency-changed ──► hoSoTinDung (+1 phiên bản)
-                                                  sai / hết lượt thử ─► <topic>.DLT
+finora-loan (DPD đổi)   ─ Kafka ─► Loan relay ─ HTTPS /loan-delinquency-events ─► hoSoTinDung
+                              └ CIC local có thể consume Kafka trực tiếp
+                                  sai / hết lượt thử ─► DLT riêng của consumer
 ```
 
 - Event không mang CCCD, chỉ mang `borrowerId` (= `user_profiles.id`). CCCD chỉ đi qua
@@ -281,6 +284,20 @@ Phản hồi thành công `{borrowerId, soCccdDaChe: "079*******34", soSuKienDaP
 không bao giờ có CCCD thô; thông điệp lỗi không lặp lại CCCD; log chỉ ghi `borrowerId`.
 Khoá được so bằng `crypto.timingSafeEqual` trên SHA-256 của hai phía và được kiểm
 **trước** khi đọc thân request.
+
+`POST /api/v1/internal/loan-delinquency-events` dùng cùng header khoá. Body là nguyên envelope
+`{eventId, occurredAt, version: 1, data}` của `LoanDelinquencyChanged.v1`:
+
+| Tình huống | HTTP | Kết quả |
+|---|---|---|
+| Đã có mapping và ghi phiên bản hồ sơ | 200 | `DA_CAP_NHAT`, có `phienBan` |
+| Event đã nhận trước đó | 200 | `DA_TON_TAI`, không ghi lần hai |
+| Chưa có mapping `borrowerId ↔ CCCD` | 202 | `CHO_MAPPING`, event được giữ bền vững để replay |
+| Envelope/version/data sai | 400 | `DU_LIEU_KHONG_HOP_LE` |
+| Thiếu/sai khoá | 403 | bị chặn trước khi đọc body |
+
+Vercel không giữ được Kafka consumer, nên FINORA Loan là bên giữ consumer group dài hạn
+và relay endpoint này. CIC vẫn là bên validation/chống trùng/quyết định chờ mapping.
 
 ### Consumer Kafka (tuỳ chọn)
 

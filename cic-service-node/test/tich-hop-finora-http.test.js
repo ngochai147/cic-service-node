@@ -1,5 +1,5 @@
 /**
- * Test Task 3: `POST /api/v1/internal/borrower-mappings` qua HTTP thật.
+ * Test hai cổng nội bộ FINORA qua HTTP thật: mapping borrower và tiếp nhận quá hạn.
  *
  * Hợp đồng phải khớp `CicMappingWorker` của FINORA (2xx = xong; 403/408/429/5xx = thử
  * lại; 4xx khác = dừng hẳn) và bản Java (`LienKetNguoiVayController` + `XuLyLoiToanCuc`).
@@ -25,6 +25,7 @@ delete process.env.CIC_INTERNAL_API_KEY
 
 const KHOA = 'khoa-gia-lap-chi-dung-trong-test-0123456789'
 const DUONG_DAN = '/api/v1/internal/borrower-mappings'
+const DUONG_DAN_QUA_HAN = '/api/v1/internal/loan-delinquency-events'
 
 const { taoApp } = await import('../src/app.js')
 const { kho } = await import('../src/du-lieu/kho-luu-tru.js')
@@ -190,6 +191,75 @@ describe('Tạo liên kết', { concurrency: false }, () => {
     assert.equal(lichSu.than.soPhienBan, 1)
     assert.equal(lichSu.than.phienBan[0].nhomNoHienTai, 2)
     assert.equal(lichSu.than.phienBan[0].tongDuNo, 30_000_000)
+  })
+})
+
+describe('Nhận LoanDelinquencyChanged qua HTTPS', { concurrency: false }, () => {
+  const event = (ghiDe = {}) => ({
+    eventId: 'bbbbbbbb-0000-4000-8000-000000000001',
+    occurredAt: '2026-10-03T03:00:00Z',
+    version: 1,
+    data: {
+      loanApplicationId: 7401,
+      loanNumber: 'LN-2026-007401',
+      borrowerId: '7401',
+      fineractLoanId: 8401,
+      previousDaysPastDue: 0,
+      daysPastDue: 12,
+      previousDebtGroup: 1,
+      debtGroup: 2,
+      overdueAmount: '2500000.00',
+      overdueSince: '2026-09-21',
+      totalOutstanding: '30000000.00',
+      dataAsOf: '2026-10-03T03:00:00Z',
+    },
+    ...ghiDe,
+  })
+
+  test('202 khi chưa có mapping, gửi lặp không tạo hàng chờ thứ hai', async () => {
+    const lanDau = await goi('mo', { duongDan: DUONG_DAN_QUA_HAN, than: event(), khoa: KHOA })
+    assert.equal(lanDau.status, 202)
+    assert.deepEqual(lanDau.than, {
+      eventId: 'bbbbbbbb-0000-4000-8000-000000000001',
+      trangThai: 'CHO_MAPPING',
+    })
+
+    const lapLai = await goi('mo', { duongDan: DUONG_DAN_QUA_HAN, than: event(), khoa: KHOA })
+    assert.equal(lapLai.status, 200)
+    assert.equal(lapLai.than.trangThai, 'DA_TON_TAI')
+    const d = await kho.layDuLieu()
+    assert.equal(d.suKienQuaHanChoXuLy.filter((x) => x.borrowerId === '7401').length, 1)
+  })
+
+  test('tạo mapping phát lại event đã chờ và cập nhật hồ sơ', async () => {
+    const mapping = await goi('mo', {
+      than: { borrowerId: '7401', soCccd: '079298000051' }, khoa: KHOA,
+    })
+    assert.equal(mapping.status, 201)
+    assert.equal(mapping.than.soSuKienDaPhatLai, 1)
+
+    const lichSu = await goi('mo', {
+      phuongThuc: 'GET', duongDan: '/api/v1/ho-so/079298000051/lich-su',
+    })
+    assert.equal(lichSu.status, 200)
+    assert.equal(lichSu.than.phienBan.at(-1).nhomNoHienTai, 2)
+  })
+
+  test('từ chối khoá sai, version sai và envelope sai', async () => {
+    const saiKhoa = await goi('mo', { duongDan: DUONG_DAN_QUA_HAN, than: event(), khoa: 'sai' })
+    assert.equal(saiKhoa.status, 403)
+
+    const saiVersion = await goi('mo', {
+      duongDan: DUONG_DAN_QUA_HAN, than: event({ version: 2 }), khoa: KHOA,
+    })
+    assert.equal(saiVersion.status, 400)
+    assert.equal(saiVersion.than.maLoi, 'DU_LIEU_KHONG_HOP_LE')
+
+    const saiEnvelope = await goi('mo', {
+      duongDan: DUONG_DAN_QUA_HAN, than: [], khoa: KHOA,
+    })
+    assert.equal(saiEnvelope.status, 400)
+    assert.equal(saiEnvelope.than.maLoi, 'DU_LIEU_KHONG_HOP_LE')
   })
 })
 
